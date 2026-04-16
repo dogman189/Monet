@@ -1,2 +1,4 @@
-requests
-typing
+
+certifi
+python-dotenv
+
