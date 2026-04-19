@@ -1,0 +1,43 @@
+{
+    "name": "ultraexchange",
+    "version": "1.0.0",
+    "description": "Algorithmic crypto trading bot — Electron + Python engine",
+    "main": "main.js",
+    "scripts": {
+      "start": "electron .",
+      "build": "electron-builder"
+    },
+    "dependencies": {},
+    "devDependencies": {
+      "electron": "^30.0.0",
+      "electron-builder": "^24.0.0"
+    },
+    "build": {
+      "appId": "com.ultraexchange.app",
+      "productName": "ultraexchange",
+      "mac": {
+        "category": "public.app-category.finance",
+        "darkModeSupport": true
+      },
+      "win": {
+        "target": "nsis"
+      },
+      "linux": {
+        "target": "AppImage"
+      },
+      "files": [
+        "main.js",
+        "preload.js",
+        "index.html",
+        "renderer.js",
+        "backend.py",
+        "config.json"
+      ],
+      "extraResources": [
+        {
+          "from": "backend.py",
+          "to": "backend.py"
+        }
+      ]
+    }
+  }
