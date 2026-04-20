@@ -15,29 +15,23 @@
     "build": {
       "appId": "com.ultraexchange.app",
       "productName": "ultraexchange",
-      "mac": {
-        "category": "public.app-category.finance",
-        "darkModeSupport": true
-      },
-      "win": {
-        "target": "nsis"
-      },
-      "linux": {
-        "target": "AppImage"
-      },
-      "files": [
-        "main.js",
-        "preload.js",
-        "index.html",
-        "renderer.js",
-        "backend.py",
-        "config.json"
-      ],
-      "extraResources": [
-        {
-          "from": "backend.py",
-          "to": "backend.py"
-        }
-      ]
+       "win": {
+        "target": {
+          "target": "portable",
+          "arch": ["x64"]
+      }
+  },
+  "extraResources": [
+    {
+      "from": "dist/backend.exe",
+      "to": "backend.exe"
     }
-  }
+  ],
+  "files": [
+    "main.js",
+    "preload.js",
+    "index.html",
+    "renderer.js"
+  ]
+}
+}

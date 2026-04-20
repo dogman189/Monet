@@ -1,7 +1,8 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const http = require('http');
+const fs = require('fs');
 
 let mainWindow = null;
 let pythonProcess = null;
@@ -9,19 +10,60 @@ const BACKEND_PORT = 5678;
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
 
 // --- PYTHON PROCESS MANAGEMENT ---
-function findPythonExecutable() {
-  const candidates = ['python3', 'python'];
-  // On macOS/Linux prefer python3; on Windows python
-  if (process.platform === 'win32') candidates.reverse();
-  return candidates[0];
+function findBackendExecutable() {
+  // PRODUCTION: use the bundled backend binary
+  if (app.isPackaged) {
+    const ext = process.platform === 'win32' ? '.exe' : '';
+    return { exe: path.join(process.resourcesPath, `backend${ext}`), args: [] };
+  }
+
+  // DEV: find system Python and run backend.py
+  const script = path.join(__dirname, 'backend.py');
+  const candidates = process.platform === 'win32'
+    ? ['python', 'python3', 'py']
+    : ['python3', 'python'];
+
+  for (const cmd of candidates) {
+    try {
+      execSync(`${cmd} --version`, { stdio: 'ignore' });
+      return { exe: cmd, args: [script] };
+    } catch (_) {}
+  }
+
+  // Windows fallback: check common install paths
+  if (process.platform === 'win32') {
+    const bases = [
+      `${process.env.LOCALAPPDATA}\\Programs\\Python`,
+      'C:\\',
+    ];
+    const versions = ['Python313', 'Python312', 'Python311', 'Python310'];
+    for (const base of bases) {
+      for (const ver of versions) {
+        const p = path.join(base, ver, 'python.exe');
+        if (fs.existsSync(p)) return { exe: p, args: [script] };
+      }
+    }
+  }
+
+  return null;
 }
 
 function startPythonBackend() {
-  const scriptPath = path.join(__dirname, 'backend.py');
-  const python = findPythonExecutable();
+  const found = findBackendExecutable();
 
-  pythonProcess = spawn(python, [scriptPath], {
-    cwd: __dirname,
+  if (!found) {
+    dialog.showErrorBox(
+      'Python Not Found',
+      'Could not find Python on this system.\n\nPlease install Python from python.org and check "Add Python to PATH" during installation.'
+    );
+    app.quit();
+    return;
+  }
+
+  const { exe, args } = found;
+
+  pythonProcess = spawn(exe, args, {
+    cwd: app.isPackaged ? process.resourcesPath : __dirname,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -37,7 +79,7 @@ function startPythonBackend() {
     console.log(`[Python] Process exited with code ${code}`);
   });
 
-  console.log(`[Electron] Spawned Python backend (PID ${pythonProcess.pid})`);
+  console.log(`[Electron] Spawned backend: ${exe} (PID ${pythonProcess.pid})`);
 }
 
 function killPythonBackend() {
@@ -73,7 +115,7 @@ function createWindow() {
     height: 780,
     minWidth: 960,
     minHeight: 640,
-    titleBarStyle: 'hiddenInset',   // macOS traffic lights inset
+    titleBarStyle: 'hiddenInset',
     backgroundColor: '#0B0F19',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
