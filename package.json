@@ -1,5 +1,5 @@
 {
-    "name": "ultraexchange",
+    "name": "monet",
     "version": "1.0.0",
     "description": "Algorithmic crypto trading bot — Electron + Python engine",
     "main": "main.js",
@@ -13,8 +13,8 @@
       "electron-builder": "^24.0.0"
     },
     "build": {
-      "appId": "com.ultraexchange.app",
-      "productName": "ultraexchange",
+      "appId": "com.monet.app",
+      "productName": "monet",
        "win": {
         "target": {
           "target": "portable",
