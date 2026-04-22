@@ -1,4 +1,4 @@
-# ultraexchange — Electron App
+# Monét — Electron App
 
 Algorithmic crypto trading bot. Electron frontend + Python Flask math engine.
 
