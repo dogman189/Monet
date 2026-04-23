@@ -197,7 +197,7 @@ html,body { width:100%; height:100%; overflow:hidden; background:var(--bg); font
 
   <header id="topbar">
     <span class="wordmark">Monét</span>
-    <span class="algo-chip">algo · v1.0</span>
+    <span class="algo-chip">algo · v2.0</span>
     <div id="topbar-right">
       <div id="status-pill">
         <span class="s-dot"></span>
@@ -346,6 +346,210 @@ html,body { width:100%; height:100%; overflow:hidden; background:var(--bg); font
 
 </div>
 
-<script src="renderer.js"></script>
+<!-- INJECTED RENDERER.JS LOGIC -->
+<script>
+  const API_URL = 'http://127.0.0.1:5678/api';
+  let statusTimer = null;
+  let eventSource = null;
+  let logCount = 0;
+  let lastPrice = 0;
+
+  // Initialization Boot Screen
+  setTimeout(() => {
+    document.getElementById('boot').classList.add('hidden');
+    fetchConfig();
+  }, 1200);
+
+  // DOM Elements
+  const elBtnStart = document.getElementById('btn-start');
+  const elBtnStop = document.getElementById('btn-stop');
+  const elStatusPill = document.getElementById('status-pill');
+  const elStatusText = document.getElementById('status-text');
+  const elLiveDot = document.getElementById('live-dot');
+  const elLiveTxt = document.getElementById('live-txt');
+
+  const inApiKey = document.getElementById('in-api-key');
+  const inSymbol = document.getElementById('in-symbol');
+  const inInterval = document.getElementById('in-interval');
+  const inTrade = document.getElementById('in-trade');
+  const inWallet = document.getElementById('in-wallet');
+
+  async function fetchConfig() {
+    try {
+      const res = await fetch(`${API_URL}/config`);
+      const data = await res.json();
+      if (data.api_key) inApiKey.value = data.api_key;
+    } catch (e) {
+      console.warn("Backend not reachable yet.");
+    }
+  }
+
+  async function updateStatus() {
+    try {
+      const res = await fetch(`${API_URL}/status`);
+      const data = await res.json();
+      
+      // Update Inputs lock state
+      inApiKey.disabled = data.is_running;
+      inSymbol.disabled = data.is_running;
+      inInterval.disabled = data.is_running;
+      inTrade.disabled = data.is_running;
+      inWallet.disabled = data.is_running;
+      
+      // Update Buttons
+      elBtnStart.disabled = data.is_running;
+      elBtnStop.disabled = !data.is_running;
+      
+      // Update Indicator
+      if (data.is_running) {
+        elStatusPill.classList.add('running');
+        elStatusText.innerText = "Syncing";
+        elLiveDot.classList.add('on');
+        elLiveTxt.innerText = "LIVE";
+      } else {
+        elStatusPill.classList.remove('running');
+        elStatusText.innerText = "Suspended";
+        elLiveDot.classList.remove('on');
+        elLiveTxt.innerText = "OFFLINE";
+      }
+
+      // Update Data Dashboard
+      document.getElementById('sym-label').innerText = `${data.symbol} / USD`;
+      document.getElementById('crypto-sym').innerText = data.symbol;
+      document.getElementById('stat-sym').innerText = data.symbol;
+      document.getElementById('stat-interval').innerText = `${data.interval}s`;
+      
+      document.getElementById('usd-val').innerText = `$${data.usd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+      document.getElementById('crypto-val').innerText = data.holdings.toFixed(6);
+      document.getElementById('avg-entry-val').innerText = data.avg_buy_price ? `$${data.avg_buy_price.toLocaleString(undefined, {minimumFractionDigits: 2})}` : '—';
+      
+      document.getElementById('stat-trades').innerText = data.total_trades;
+      document.getElementById('stat-buys').innerText = data.total_buys;
+      document.getElementById('stat-sells').innerText = data.total_sells;
+      document.getElementById('stat-stops').innerText = data.stop_losses_hit;
+
+      // Price Formatting
+      const priceEl = document.getElementById('price-val');
+      if (data.price) {
+        priceEl.innerText = `$${data.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        if (data.price > lastPrice && lastPrice !== 0) { priceEl.className = 'up'; }
+        else if (data.price < lastPrice && lastPrice !== 0) { priceEl.className = 'down'; }
+        lastPrice = data.price;
+      }
+
+      // BB & RSI Formatting
+      if (data.sma && data.upper && data.lower) {
+        document.getElementById('sma-main').innerText = `SMA $${data.sma.toLocaleString(undefined, {minimumFractionDigits:2})}`;
+        document.getElementById('sma-val').innerText = `$${data.sma.toLocaleString(undefined, {minimumFractionDigits:2})}`;
+        document.getElementById('upper-val').innerText = `$${data.upper.toLocaleString(undefined, {minimumFractionDigits:2})}`;
+        document.getElementById('lower-val').innerText = `$${data.lower.toLocaleString(undefined, {minimumFractionDigits:2})}`;
+        document.getElementById('upper-lbl').innerText = `$${data.upper.toLocaleString(undefined, {minimumFractionDigits:0})}`;
+        document.getElementById('lower-lbl').innerText = `$${data.lower.toLocaleString(undefined, {minimumFractionDigits:0})}`;
+
+        // Move the band needle based on price position relative to bands
+        const range = data.upper - data.lower;
+        const pos = Math.max(0, Math.min(100, ((data.price - data.lower) / range) * 100));
+        document.getElementById('band-needle').style.left = `${pos}%`;
+      }
+      
+      if (data.rsi !== null) {
+        const rsiEl = document.getElementById('rsi-val');
+        rsiEl.innerText = data.rsi.toFixed(1);
+        if (data.rsi > 65) rsiEl.className = 'rsi-label-val overbought';
+        else if (data.rsi < 35) rsiEl.className = 'rsi-label-val oversold';
+        else rsiEl.className = 'rsi-label-val';
+        document.getElementById('rsi-fill').style.width = `${Math.min(100, Math.max(0, data.rsi))}%`;
+      }
+
+      if (data.bandwidth !== null) {
+        const bwEl = document.getElementById('bw-badge');
+        bwEl.innerText = `BW ${data.bandwidth.toFixed(4)}`;
+        if (data.bandwidth < 0.02) bwEl.className = 'bw-badge squeeze';
+        else bwEl.className = 'bw-badge';
+      }
+
+    } catch (e) {
+      console.log("Failed to fetch status.");
+    }
+  }
+
+  // Handle Log Events
+  function appendLog(msgStr) {
+    const logBox = document.getElementById('log-output');
+    
+    // Parse timestamp and body (format is [HH:MM:SS] Message)
+    const timeMatch = msgStr.match(/^\[(.*?)\]\s+(.*)/);
+    let time = "", body = msgStr;
+    if (timeMatch) {
+      time = timeMatch[1];
+      body = timeMatch[2];
+    }
+
+    const row = document.createElement('div');
+    row.className = 'log-row';
+    
+    if (body.includes('BUY')) row.classList.add('buy');
+    else if (body.includes('SELL')) row.classList.add('sell');
+    else if (body.includes('Error') || body.includes('Failed')) row.classList.add('err');
+    else if (body.includes('System') || body.includes('Calibrating')) row.classList.add('sys');
+    else if (body.includes('Signal')) row.classList.add('sig');
+    else if (body.includes('Risk')) row.classList.add('risk');
+    else if (body.includes('Filter')) row.classList.add('filter');
+
+    row.innerHTML = `<div class="log-ts">${time}</div><div class="log-body">${body}</div>`;
+    logBox.appendChild(row);
+    
+    // Auto-scroll and keep bounded
+    logBox.scrollTop = logBox.scrollHeight;
+    if (logBox.children.length > 200) logBox.removeChild(logBox.firstChild);
+    
+    logCount++;
+    document.getElementById('log-count').innerText = `${logCount} events`;
+  }
+
+  function startLogStream() {
+    if (eventSource) eventSource.close();
+    eventSource = new EventSource(`${API_URL}/logs`);
+    eventSource.onmessage = (e) => {
+      const parsed = JSON.parse(e.data);
+      appendLog(parsed);
+    };
+  }
+
+  elBtnStart.addEventListener('click', async () => {
+    const payload = {
+      api_key: inApiKey.value,
+      symbol: inSymbol.value,
+      interval: parseInt(inInterval.value),
+      trade_amt: parseFloat(inTrade.value),
+      wallet: parseFloat(inWallet.value)
+    };
+    try {
+      const res = await fetch(`${API_URL}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        startLogStream();
+        updateStatus();
+      } else {
+        alert("Failed to start bot. Check API Key.");
+      }
+    } catch (e) { console.error(e); }
+  });
+
+  elBtnStop.addEventListener('click', async () => {
+    try {
+      await fetch(`${API_URL}/stop`, { method: 'POST' });
+      updateStatus();
+      if (eventSource) eventSource.close();
+    } catch (e) { console.error(e); }
+  });
+
+  // Start polling
+  setInterval(updateStatus, 1000);
+</script>
+
 </body>
 </html>
